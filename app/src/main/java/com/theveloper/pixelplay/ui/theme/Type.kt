@@ -33,7 +33,8 @@ val InterFamily = FontFamily(
     Font(googleFont = inter, fontProvider = provider, weight = FontWeight.Normal),
 )
 
-val MontserratFamily = FontFamily(
+@Suppress("unused")
+private val MontserratFamilyOriginal = FontFamily(
     Font(googleFont = montserrat, fontProvider = provider, weight = FontWeight.Black),
     Font(googleFont = montserrat, fontProvider = provider, weight = FontWeight.ExtraBold),
     Font(googleFont = montserrat, fontProvider = provider, weight = FontWeight.Bold),
@@ -48,7 +49,6 @@ val ExpTitleTypography = Typography(
         fontFamily = MontserratFamily,
         fontWeight = FontWeight.SemiBold,
         fontSize = 60.sp,
-        textGeometricTransform = TextGeometricTransform(scaleX = 1.5f),
         letterSpacing = (-0.02).em,
         lineHeight = 0.95.em,
         platformStyle = PlatformTextStyle(includeFontPadding = false)
@@ -57,7 +57,7 @@ val ExpTitleTypography = Typography(
         fontFamily = MontserratFamily,
         fontWeight = FontWeight.Normal,
         fontSize = 50.sp,
-        //textGeometricTransform = TextGeometricTransform(scaleX = 1f),
+        //
         letterSpacing = (-0.02).em,
         lineHeight = 0.95.em,
         platformStyle = PlatformTextStyle(includeFontPadding = false)
@@ -66,7 +66,6 @@ val ExpTitleTypography = Typography(
         fontFamily = MontserratFamily,
         fontWeight = FontWeight.Bold,
         fontSize = 32.sp,
-        textGeometricTransform = TextGeometricTransform(scaleX = 1.3f),
         letterSpacing = (-0.02).em,
         lineHeight = 0.95.em,
         platformStyle = PlatformTextStyle(includeFontPadding = false)
@@ -76,8 +75,9 @@ val ExpTitleTypography = Typography(
 // Google Sans Flex variable font with rounded axis for Google Sans Rounded-like appearance.
 private const val GoogleSansFlexRond = 100f
 
+@Suppress("unused")
 @OptIn(ExperimentalTextApi::class)
-val GoogleSansRounded = FontFamily(
+private val GoogleSansRoundedOriginal = FontFamily(
     androidx.compose.ui.text.font.Font(
         resId = R.font.gflex_variable,
         weight = FontWeight.Light,
@@ -229,3 +229,7 @@ val Typography = Typography(
         letterSpacing = 0.5.sp
     )
 )
+
+// ---- iOS-style font everywhere: all former font families now point to Inter ----
+val MontserratFamily: FontFamily get() = InterFamily
+val GoogleSansRounded: FontFamily get() = InterFamily

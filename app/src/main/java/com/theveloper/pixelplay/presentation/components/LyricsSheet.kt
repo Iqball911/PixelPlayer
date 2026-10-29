@@ -68,6 +68,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.foundation.layout.Row
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -1616,18 +1620,29 @@ fun LyricLineRow(
                 },
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
+                // Each cluster = one real word (syllables glued together, no gap between them).
                 sanitizedWordClusters.forEach { cluster ->
-                    cluster.words.forEachIndexed { clusterOffset, word ->
-                        val wordIndex = cluster.startIndex + clusterOffset
-                        key("${line.time}_${word.time}_${word.word}_$wordIndex") {
-                            LyricWordSpan(
-                                word = word,
-                                isHighlighted = isCurrentLine && wordIndex == highlightedWordIndex,
-                                useAnimatedLyrics = useAnimatedLyrics,
-                                style = style,
-                                highlightedColor = accentColor,
-                                unhighlightedColor = unhighlightedColor
+                    Row {
+                        cluster.words.forEachIndexed { clusterOffset, word ->
+                            val wordIndex = cluster.startIndex + clusterOffset
+                            val nextWordTime = sanitizedWords
+                                ?.getOrNull(wordIndex + 1)?.time?.toLong() ?: lineEndTime
+                            val wordEndTime = normalizeWordEndTime(
+                                currentWordTimeMs = word.time.toLong(),
+                                nextWordTimeMs = nextWordTime,
+                                lineEndTimeMs = lineEndTime
                             )
+                            key("${line.time}_${word.time}_${word.word}_$wordIndex") {
+                                LyricWordSpan(
+                                    word = word,
+                                    wordEndTimeMs = wordEndTime,
+                                    isCurrentLine = isCurrentLine,
+                                    positionProvider = { position },
+                                    style = style,
+                                    highlightedColor = accentColor,
+                                    unhighlightedColor = unhighlightedColor
+                                )
+                            }
                         }
                     }
                 }
@@ -1656,68 +1671,67 @@ fun LyricLineRow(
     }
 }
 
+/**
+ * Apple Music-style word: the accent colour "fills" the word left-to-right in sync with the
+ * song, with a soft feathered edge, and the word lifts slightly while it is being sung.
+ * Progress is read inside the draw phase, so no recomposition happens per frame.
+ */
 @Composable
 fun LyricWordSpan(
     word: SyncedWord,
-    isHighlighted: Boolean,
-    useAnimatedLyrics: Boolean = false,
+    wordEndTimeMs: Long,
+    isCurrentLine: Boolean,
+    positionProvider: () -> Long,
     style: TextStyle,
     highlightedColor: Color,
     unhighlightedColor: Color,
     modifier: Modifier = Modifier
 ) {
-    val wordAnimSpec = if (useAnimatedLyrics) spring<Float>(
-        stiffness = Spring.StiffnessVeryLow,
-        dampingRatio = Spring.DampingRatioMediumBouncy
-    ) else tween(durationMillis = 200)
+    val startMs = word.time.toLong()
+    val durationMs = (wordEndTimeMs - startMs).coerceAtLeast(1L).toFloat()
+    val liftPx = with(LocalDensity.current) { 2.dp.toPx() }
+    val featherFraction = 0.35f
 
-    val color by animateColorAsState(
-        targetValue = if (isHighlighted) highlightedColor else unhighlightedColor,
-        animationSpec = if (useAnimatedLyrics) spring(
-            stiffness = Spring.StiffnessVeryLow,
-            dampingRatio = Spring.DampingRatioMediumBouncy
-        ) else tween(durationMillis = 200),
-        label = "wordColor"
-    )
+    fun progress(): Float {
+        if (!isCurrentLine) return 0f
+        return ((positionProvider() - startMs) / durationMs).coerceIn(0f, 1f)
+    }
 
-    // Scale: pop up to 1.10 on highlight, settle back to 1f. Only active when
-    // animated lyrics is on — layout is untouched because it's applied in graphicsLayer.
-    val scale by animateFloatAsState(
-        targetValue = if (useAnimatedLyrics && isHighlighted) 1.10f else 1f,
-        animationSpec = wordAnimSpec,
-        label = "wordScale"
-    )
-
-    // Alpha: unhighlighted words dim slightly so the active word pops without
-    // needing a hard color contrast. Only active when animated lyrics is on.
-    val alpha by animateFloatAsState(
-        targetValue = if (useAnimatedLyrics && !isHighlighted) 0.55f else 1f,
-        animationSpec = wordAnimSpec,
-        label = "wordAlpha"
-    )
-
-    Box(
-        modifier = modifier,
-        contentAlignment = Alignment.Center
-    ) {
-        // Invisible bold text to reserve layout space and prevent reflow
+    Box(modifier = modifier) {
+        // Base layer: dim text (also reserves layout space)
         Text(
             text = word.word,
             style = style,
-            color = Color.Transparent,
-            fontWeight = FontWeight.Bold,
+            color = unhighlightedColor,
+            fontWeight = FontWeight.Bold
         )
+        // Fill layer: accent text revealed by a soft horizontal gradient mask
         Text(
             text = word.word,
             style = style,
-            color = color,
-            fontWeight = if (isHighlighted) FontWeight.Bold else FontWeight.Normal,
-            // Scale and alpha applied at draw phase — zero layout impact per frame.
-            modifier = Modifier.graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-                this.alpha = alpha
-            }
+            color = highlightedColor,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier
+                .graphicsLayer {
+                    compositingStrategy = CompositingStrategy.Offscreen
+                    translationY = -liftPx * progress()
+                }
+                .drawWithContent {
+                    drawContent()
+                    val p = progress()
+                    val edge = (p * (1f + featherFraction)).coerceAtLeast(0f)
+                    val solidEnd = (edge - featherFraction).coerceIn(0f, 1f)
+                    val fadeEnd = edge.coerceIn(0f, 1f)
+                    val brush = Brush.horizontalGradient(
+                        0f to Color.Black,
+                        solidEnd to Color.Black,
+                        fadeEnd.coerceAtLeast(solidEnd + 0.0001f).coerceAtMost(1f) to Color.Transparent,
+                        1f to Color.Transparent,
+                        startX = 0f,
+                        endX = size.width
+                    )
+                    drawRect(brush = brush, blendMode = BlendMode.DstIn)
+                }
         )
     }
 }

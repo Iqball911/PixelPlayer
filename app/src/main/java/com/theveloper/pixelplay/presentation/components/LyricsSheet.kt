@@ -508,6 +508,7 @@ fun LyricsSheet(
     )
     
     val scaledTextStyle = lyricsTextStyle.copy(
+        fontFamily = com.theveloper.pixelplay.ui.theme.InterFamily,
         fontSize = lyricsTextStyle.fontSize * fontScale,
         lineHeight = lyricsTextStyle.lineHeight * fontScale
     )

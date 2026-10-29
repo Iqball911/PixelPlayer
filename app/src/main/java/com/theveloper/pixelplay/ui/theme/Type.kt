@@ -22,6 +22,17 @@ private val provider = GoogleFont.Provider(
     certificates      = R.array.com_google_android_gms_fonts_certs
 )
 
+// Inter: open-source font closest to Apple's San Francisco (iOS system font).
+// Used as the default font for lyrics.
+private val inter = GoogleFont("Inter")
+
+val InterFamily = FontFamily(
+    Font(googleFont = inter, fontProvider = provider, weight = FontWeight.Bold),
+    Font(googleFont = inter, fontProvider = provider, weight = FontWeight.SemiBold),
+    Font(googleFont = inter, fontProvider = provider, weight = FontWeight.Medium),
+    Font(googleFont = inter, fontProvider = provider, weight = FontWeight.Normal),
+)
+
 val MontserratFamily = FontFamily(
     Font(googleFont = montserrat, fontProvider = provider, weight = FontWeight.Black),
     Font(googleFont = montserrat, fontProvider = provider, weight = FontWeight.ExtraBold),
